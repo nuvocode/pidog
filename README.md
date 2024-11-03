@@ -83,3 +83,12 @@ E-mail:
 ## Credit
 
 Most sound effect are from [Zapsplat.com](https://www.zapsplat.com)
+
+
+## Now you can make changes to your local files, commit them and push to your repo:
+git add .
+git commit -m "your changes description"
+git push origin main
+# If you need to get updates from the original sunfounder repo:
+git fetch upstream
+git merge upstream/main
