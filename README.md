@@ -1,3 +1,10 @@
+# Connect via ssh
+ssh pasha@pashaPi.local
+
+Or 
+
+ssh pasha@192.168.0.80
+
 # Pidog
 
 Pidog Python library for Raspberry Pi.
