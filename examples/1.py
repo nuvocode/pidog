@@ -6,7 +6,6 @@ import time
 import sys
 from datetime import datetime
 
-# Set up logging
 def setup_logging():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     logging.basicConfig(
@@ -23,11 +22,18 @@ logger = setup_logging()
 
 def safe_action(dog, action_name, timeout=5, **kwargs):
     try:
-        logger.info(f"Starting action: {action_name}")
+        logger.info(f"Attempting action: {action_name}")
+        # First, ensure no other actions are running
+        sleep(0.5)
         start_time = time.time()
         dog.do_action(action_name, **kwargs)
-        while time.time() - start_time < timeout:
-            sleep(0.1)
+        current_time = time.time()
+        while current_time - start_time < timeout:
+            sleep(0.2)
+            current_time = time.time()
+            if current_time - start_time > timeout:
+                logger.warning(f"Action {action_name} timed out")
+                break
         logger.info(f"Completed action: {action_name}")
         return True
     except Exception as e:
@@ -37,60 +43,47 @@ def safe_action(dog, action_name, timeout=5, **kwargs):
 def safe_rgb(dog, mode, color, bps, brightness):
     try:
         logger.info(f"Setting RGB mode: {mode}")
+        sleep(0.2)  # Small delay before accessing RGB
         dog.rgb_strip.set_mode(mode, color=color, bps=bps, brightness=brightness)
-        sleep(0.5)
+        sleep(0.2)  # Small delay after setting RGB
         logger.info("RGB set successfully")
     except Exception as e:
         logger.error(f"RGB setting failed: {e}")
 
-def safe_head_move(dog, angles, **kwargs):
-    try:
-        logger.info("Moving head")
-        dog.head_move(angles, **kwargs)
-        sleep(0.5)
-        logger.info("Head move completed")
-    except Exception as e:
-        logger.error(f"Head move failed: {e}")
-
 def wake_up(my_dog):
     try:
-        # Initial setup
-        logger.info("Starting wake up sequence")
-        safe_rgb(my_dog, 'listen', 'yellow', 0.6, 0.8)
-        sleep(1)
+        # Just try RGB first
+        logger.info("Testing RGB only")
+        safe_rgb(my_dog, 'breath', 'blue', 0.5, 0.8)
+        sleep(2)
 
-        # Basic movements
-        logger.info("Starting basic movements")
-        safe_action(my_dog, 'stretch', timeout=3, speed=50)
-        sleep(1)
+        # Test simple head movement
+        logger.info("Testing head movement")
+        try:
+            my_dog.head_move([[0, 0, 0]], immediately=True, speed=50)
+            sleep(2)
+            logger.info("Head movement successful")
+        except Exception as e:
+            logger.error(f"Head movement failed: {e}")
 
-        safe_head_move(my_dog, [[0, 0, 30]], immediately=True)
-        sleep(1)
+        # Test simple sitting
+        logger.info("Testing sit action")
+        if safe_action(my_dog, 'sit', timeout=3, speed=25):
+            logger.info("Sit action successful")
+            sleep(2)
+        
+        # If we got this far, try a simple wag
+        logger.info("Testing wag")
+        if safe_action(my_dog, 'wag_tail', timeout=2, step_count=2, speed=30):
+            logger.info("Wag successful")
+            sleep(2)
 
-        # Sit sequence
-        logger.info("Starting sit sequence")
-        safe_action(my_dog, 'sit', timeout=3, speed=25)
-        sleep(1)
-
-        # Wag tail sequence
-        logger.info("Starting wag tail")
-        safe_action(my_dog, 'wag_tail', timeout=2, step_count=3, speed=100)
-        safe_rgb(my_dog, 'breath', [245, 10, 10], 2.5, 0.8)
-        sleep(1)
-
-        # Hold pattern with simple wag
-        logger.info("Entering hold pattern")
-        count = 0
+        # Enter a very simple hold pattern
+        logger.info("Entering simplified hold pattern")
         while True:
-            try:
-                count += 1
-                logger.info(f"Hold pattern iteration: {count}")
-                safe_action(my_dog, 'wag_tail', timeout=2, step_count=3, speed=30)
-                safe_rgb(my_dog, 'breath', 'pink', 0.5, 0.8)
-                sleep(2)
-            except Exception as e:
-                logger.error(f"Hold pattern error: {e}")
-                sleep(1)
+            safe_rgb(my_dog, 'breath', 'pink', 0.5, 0.8)
+            sleep(3)
+            logger.info("Hold pattern cycle complete")
 
     except Exception as e:
         logger.error(f"Error during wake up sequence: {e}")
@@ -100,9 +93,9 @@ def main():
     my_dog = None
     try:
         logger.info("Starting PiDog wake up program")
-        my_dog = Pidog(head_init_angles=[0, 0, -30])
+        my_dog = Pidog(head_init_angles=[0, 0, 0])  # Starting with neutral position
         logger.info("PiDog initialized successfully")
-        sleep(2)  # Added longer delay after initialization
+        sleep(3)  # Longer delay after initialization
         
         wake_up(my_dog)
 
