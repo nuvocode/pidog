@@ -25,4 +25,8 @@ ssh pasha@192.168.0.80
 ## Pull Pi updates
 cd ~/pidog
 git pull
-sudo python3 setup.py install
+
+# Reset utility
+cd ~/pidog/utils
+sudo python3 reset_pidog.py
+

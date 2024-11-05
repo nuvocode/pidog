@@ -20,21 +20,21 @@ def setup_logging():
 
 logger = setup_logging()
 
-def safe_action(dog, action_name, timeout=5, **kwargs):
+def safe_action(dog, action_name, timeout=3, **kwargs):  # Reduced default timeout
     try:
         logger.info(f"Attempting action: {action_name}")
-        # First, ensure no other actions are running
-        sleep(0.5)
         start_time = time.time()
         dog.do_action(action_name, **kwargs)
-        current_time = time.time()
-        while current_time - start_time < timeout:
-            sleep(0.2)
-            current_time = time.time()
-            if current_time - start_time > timeout:
-                logger.warning(f"Action {action_name} timed out")
-                break
-        logger.info(f"Completed action: {action_name}")
+        sleep(0.1)  # Shorter initial delay
+        
+        # Wait for action with faster checking
+        while time.time() - start_time < timeout:
+            sleep(0.1)  # Faster polling
+            if dog.legs_done:  # Check if action is actually complete
+                logger.info(f"Action {action_name} completed naturally")
+                return True
+            
+        logger.warning(f"Action {action_name} timed out")
         return True
     except Exception as e:
         logger.error(f"Action {action_name} failed: {e}")
@@ -42,47 +42,61 @@ def safe_action(dog, action_name, timeout=5, **kwargs):
 
 def safe_rgb(dog, mode, color, bps, brightness):
     try:
-        logger.info(f"Setting RGB mode: {mode}")
-        sleep(0.2)  # Small delay before accessing RGB
         dog.rgb_strip.set_mode(mode, color=color, bps=bps, brightness=brightness)
-        sleep(0.2)  # Small delay after setting RGB
-        logger.info("RGB set successfully")
+        sleep(0.1)  # Minimal delay
     except Exception as e:
         logger.error(f"RGB setting failed: {e}")
 
+def safe_sound(dog, sound_name):
+    try:
+        logger.info(f"Playing sound: {sound_name}")
+        dog.sound_effect.sound_effect_threading(sound_name)
+        sleep(0.1)  # Small delay to let sound start
+    except Exception as e:
+        logger.error(f"Sound playback failed: {e}")
+
 def wake_up(my_dog):
     try:
-        # Just try RGB first
-        logger.info("Testing RGB only")
-        safe_rgb(my_dog, 'breath', 'blue', 0.5, 0.8)
-        sleep(2)
-
-        # Test simple head movement
-        logger.info("Testing head movement")
-        try:
-            my_dog.head_move([[0, 0, 0]], immediately=True, speed=50)
-            sleep(2)
-            logger.info("Head movement successful")
-        except Exception as e:
-            logger.error(f"Head movement failed: {e}")
-
-        # Test simple sitting
-        logger.info("Testing sit action")
-        if safe_action(my_dog, 'sit', timeout=3, speed=25):
-            logger.info("Sit action successful")
-            sleep(2)
+        # Initial wake-up sequence
+        logger.info("Starting wake-up sequence")
+        safe_rgb(my_dog, 'breath', 'blue', 1.0, 0.8)  # Faster breathing
+        safe_sound(my_dog, 'wakeup')  # Add wake-up sound
         
-        # If we got this far, try a simple wag
-        logger.info("Testing wag")
-        if safe_action(my_dog, 'wag_tail', timeout=2, step_count=2, speed=30):
-            logger.info("Wag successful")
-            sleep(2)
+        # Head movement with sound
+        logger.info("Performing head movement")
+        my_dog.head_move([[0, 0, 20], [0, 0, -20], [0, 0, 0]], 
+                        speed=80,  # Faster speed
+                        immediately=True)
+        safe_sound(my_dog, 'bark')
+        sleep(1)
 
-        # Enter a very simple hold pattern
-        logger.info("Entering simplified hold pattern")
+        # Quick stretch sequence
+        logger.info("Stretching")
+        safe_action(my_dog, 'stretch', timeout=2, speed=80)  # Faster stretch
+        safe_sound(my_dog, 'pant')
+        
+        # Sit and wag sequence
+        logger.info("Sitting and wagging")
+        safe_action(my_dog, 'sit', timeout=2, speed=50)
+        safe_rgb(my_dog, 'breath', 'green', 1.0, 0.8)
+        
+        # More dynamic wagging
+        for _ in range(3):  # Multiple quick wags
+            safe_action(my_dog, 'wag_tail', timeout=1, step_count=2, speed=80)
+            safe_sound(my_dog, 'bark_short')
+            sleep(0.5)
+
+        # Hold pattern with occasional actions
+        logger.info("Entering interactive hold pattern")
+        safe_rgb(my_dog, 'breath', 'pink', 0.5, 0.8)
+        
+        count = 0
         while True:
-            safe_rgb(my_dog, 'breath', 'pink', 0.5, 0.8)
-            sleep(3)
+            count += 1
+            if count % 5 == 0:  # Every 5 cycles
+                safe_sound(my_dog, 'bark_short')
+                safe_action(my_dog, 'wag_tail', timeout=1, step_count=1, speed=50)
+            sleep(2)
             logger.info("Hold pattern cycle complete")
 
     except Exception as e:
@@ -93,14 +107,19 @@ def main():
     my_dog = None
     try:
         logger.info("Starting PiDog wake up program")
-        my_dog = Pidog(head_init_angles=[0, 0, 0])  # Starting with neutral position
+        my_dog = Pidog(head_init_angles=[0, 0, 0])
         logger.info("PiDog initialized successfully")
-        sleep(3)  # Longer delay after initialization
+        sleep(1)  # Shorter initial delay
         
         wake_up(my_dog)
 
     except KeyboardInterrupt:
         logger.info("Program stopped by user")
+        # Add a goodbye sound
+        if my_dog:
+            safe_sound(my_dog, 'sleep')
+            safe_rgb(my_dog, 'off', None, 0, 0)
+            
     except Exception as e:
         logger.error(f"Unexpected error occurred: {str(e)}", exc_info=True)
     finally:
