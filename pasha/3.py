@@ -4,6 +4,7 @@ from pidog import Pidog
 from time import sleep
 import sys
 from datetime import datetime
+from preset_actions import hand_shake, high_five  # Import the functions directly
 
 def setup_logging():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -35,15 +36,13 @@ def greeting_sequence(my_dog, volume=100):
         # Handshake
         logger.info("Performing handshake")
         my_dog.rgb_strip.set_mode('breath', color='blue', bps=1.0)
-        my_dog.do_action('handshake', speed=80)
-        my_dog.wait_all_done()
+        hand_shake(my_dog)  # Call the function directly
         sleep(1)
 
         # High five
         logger.info("Performing high five")
         my_dog.rgb_strip.set_mode('breath', color='red', bps=1.0)
-        my_dog.do_action('high five', speed=80)
-        my_dog.wait_all_done()
+        high_five(my_dog)  # Call the function directly
         sleep(1)
 
         # Return to normal position
