@@ -3,8 +3,6 @@ import logging
 from pidog import Pidog
 from time import sleep
 import time
-from preset_actions import pant
-from preset_actions import body_twisting
 import sys
 from datetime import datetime
 
@@ -25,71 +23,74 @@ logger = setup_logging()
 
 def safe_action(dog, action_name, timeout=5, **kwargs):
     try:
+        logger.info(f"Starting action: {action_name}")
         start_time = time.time()
         dog.do_action(action_name, **kwargs)
         while time.time() - start_time < timeout:
             sleep(0.1)
+        logger.info(f"Completed action: {action_name}")
         return True
     except Exception as e:
         logger.error(f"Action {action_name} failed: {e}")
         return False
 
-def safe_wait(dog, timeout=2):
+def safe_rgb(dog, mode, color, bps, brightness):
     try:
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            sleep(0.1)
+        logger.info(f"Setting RGB mode: {mode}")
+        dog.rgb_strip.set_mode(mode, color=color, bps=bps, brightness=brightness)
+        sleep(0.5)
+        logger.info("RGB set successfully")
     except Exception as e:
-        logger.error(f"Wait failed: {e}")
+        logger.error(f"RGB setting failed: {e}")
+
+def safe_head_move(dog, angles, **kwargs):
+    try:
+        logger.info("Moving head")
+        dog.head_move(angles, **kwargs)
+        sleep(0.5)
+        logger.info("Head move completed")
+    except Exception as e:
+        logger.error(f"Head move failed: {e}")
 
 def wake_up(my_dog):
     try:
-        # stretch
-        logger.info("Starting wake up sequence - stretch")
-        my_dog.rgb_strip.set_mode('listen', color='yellow', bps=0.6, brightness=0.8)
-        safe_wait(my_dog, 1)
+        # Initial setup
+        logger.info("Starting wake up sequence")
+        safe_rgb(my_dog, 'listen', 'yellow', 0.6, 0.8)
+        sleep(1)
 
-        safe_action(my_dog, 'stretch', speed=50)
-        safe_wait(my_dog, 2)
+        # Basic movements
+        logger.info("Starting basic movements")
+        safe_action(my_dog, 'stretch', timeout=3, speed=50)
+        sleep(1)
 
-        my_dog.head_move([[0, 0, 30]], immediately=True)
-        safe_wait(my_dog, 1)
+        safe_head_move(my_dog, [[0, 0, 30]], immediately=True)
+        sleep(1)
 
-        logger.info("Performing body twisting")
-        try:
-            body_twisting(my_dog)
-            safe_wait(my_dog, 2)
-        except Exception as e:
-            logger.error(f"Body twisting error: {e}")
+        # Sit sequence
+        logger.info("Starting sit sequence")
+        safe_action(my_dog, 'sit', timeout=3, speed=25)
+        sleep(1)
 
-        my_dog.head_move([[0, 0, -30]], immediately=True, speed=90)
-        safe_wait(my_dog, 1)
+        # Wag tail sequence
+        logger.info("Starting wag tail")
+        safe_action(my_dog, 'wag_tail', timeout=2, step_count=3, speed=100)
+        safe_rgb(my_dog, 'breath', [245, 10, 10], 2.5, 0.8)
+        sleep(1)
 
-        # sit and wag_tail
-        logger.info("Starting sit and wag tail sequence")
-        safe_action(my_dog, 'sit', speed=25)
-        safe_wait(my_dog, 2)
-
-        safe_action(my_dog, 'wag_tail', step_count=5, speed=100)
-        my_dog.rgb_strip.set_mode('breath', color=[245, 10, 10], bps=2.5, brightness=0.8)
-        safe_wait(my_dog, 1)
-
-        try:
-            pant(my_dog, pitch_comp=-30, volume=80)
-        except Exception as e:
-            logger.error(f"Panting error: {e}")
-        safe_wait(my_dog, 1)
-
-        # hold pattern with recovery
+        # Hold pattern with simple wag
         logger.info("Entering hold pattern")
+        count = 0
         while True:
             try:
-                safe_action(my_dog, 'wag_tail', step_count=5, speed=30, timeout=3)
-                my_dog.rgb_strip.set_mode('breath', 'pink', bps=0.5)
-                safe_wait(my_dog, 2)
+                count += 1
+                logger.info(f"Hold pattern iteration: {count}")
+                safe_action(my_dog, 'wag_tail', timeout=2, step_count=3, speed=30)
+                safe_rgb(my_dog, 'breath', 'pink', 0.5, 0.8)
+                sleep(2)
             except Exception as e:
                 logger.error(f"Hold pattern error: {e}")
-                safe_wait(my_dog, 1)
+                sleep(1)
 
     except Exception as e:
         logger.error(f"Error during wake up sequence: {e}")
@@ -101,7 +102,8 @@ def main():
         logger.info("Starting PiDog wake up program")
         my_dog = Pidog(head_init_angles=[0, 0, -30])
         logger.info("PiDog initialized successfully")
-        sleep(1)
+        sleep(2)  # Added longer delay after initialization
+        
         wake_up(my_dog)
 
     except KeyboardInterrupt:
