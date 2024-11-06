@@ -1,3 +1,4 @@
+# ws_server.py
 import asyncio
 import websockets
 import json
@@ -5,6 +6,25 @@ from pidog import Pidog
 from vilib import Vilib
 import time
 import os
+import logging
+from datetime import datetime
+from preset_actions import hand_shake, high_five
+import sys
+
+# Initialize logging
+def setup_logging():
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(f'pidog_log_{timestamp}.log'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 # Initialize PiDog
 my_dog = Pidog()
@@ -19,6 +39,27 @@ def getIP():
     wlan0 = os.popen("ifconfig wlan0 |awk '/inet/'|awk 'NR==1 {print $2}'").readline().strip('\n')
     eth0 = os.popen("ifconfig eth0 |awk '/inet/'|awk 'NR==1 {print $2}'").readline().strip('\n')
     return wlan0 if wlan0 != '' else eth0
+
+async def welcome_sequence(my_dog):
+    try:
+        my_dog.do_action('sit', speed=80)
+        my_dog.wait_all_done()
+        my_dog.rgb_strip.set_mode('breath', color='green', bps=1.0)
+        my_dog.speak('pasha', 100)
+        time.sleep(1)
+        my_dog.rgb_strip.set_mode('breath', color='blue', bps=1.0)
+        hand_shake(my_dog)
+        time.sleep(1)
+        my_dog.rgb_strip.set_mode('breath', color='red', bps=1.0)
+        high_five(my_dog)
+        time.sleep(1)
+        my_dog.rgb_strip.set_mode('breath', color='yellow', bps=0.5)
+        my_dog.do_action('sit', speed=80)
+        my_dog.wait_all_done()
+        return True
+    except Exception as e:
+        logger.error(f"Error during welcome sequence: {e}")
+        return False
 
 async def handle_command(websocket, path):
     try:
@@ -50,11 +91,36 @@ async def handle_command(websocket, path):
                     }
                     await websocket.send(json.dumps(response))
                     print(f"Head moved to - Yaw: {yaw}, Pitch: {pitch}, Roll: {roll}")
-                
+
+                elif command_type == 'welcome':
+                    success = await welcome_sequence(my_dog)
+                    response = {
+                        'status': 'success' if success else 'error',
+                        'command': 'welcome'
+                    }
+                    await websocket.send(json.dumps(response))
+
+                elif command_type == 'sit':
+                    my_dog.do_action('sit', speed=80)
+                    my_dog.wait_all_done()
+                    response = {
+                        'status': 'success',
+                        'command': 'sit'
+                    }
+                    await websocket.send(json.dumps(response))
+
+                elif command_type == 'stand':
+                    my_dog.do_action('stand', speed=80)
+                    my_dog.wait_all_done()
+                    response = {
+                        'status': 'success',
+                        'command': 'stand'
+                    }
+                    await websocket.send(json.dumps(response))
+                    
                 elif command_type == 'voice_command':
                     command = data.get('data', {}).get('command', '')
                     print(f"Received voice command: {command}")
-                    # Add voice command handling here if needed
                     response = {
                         'status': 'success',
                         'command': 'voice_command',
