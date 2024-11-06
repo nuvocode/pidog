@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from preset_actions import hand_shake, high_five
 import sys
+import signal
 
 # Initialize logging
 def setup_logging():
@@ -25,14 +26,37 @@ def setup_logging():
 
 logger = setup_logging()
 
-# Initialize PiDog
-my_dog = Pidog()
-time.sleep(0.5)
+# Global variables
+my_dog = None
+server = None
+is_running = True
 
 # Head control variables
 head_yrp = [0, 0, 0]
 head_pitch_init = 0
 HEAD_SPEED = 80
+
+def cleanup():
+    global my_dog, is_running
+    logger.info("Cleaning up resources...")
+    is_running = False
+    
+    if my_dog:
+        try:
+            my_dog.rgb_strip.set_mode('off')
+            my_dog.close()
+        except Exception as e:
+            logger.error(f"Error closing PiDog: {e}")
+    
+    try:
+        Vilib.camera_close()
+    except Exception as e:
+        logger.error(f"Error closing camera: {e}")
+
+def signal_handler(signum, frame):
+    logger.info(f"Received signal {signum}")
+    cleanup()
+    sys.exit(0)
 
 def getIP():
     wlan0 = os.popen("ifconfig wlan0 |awk '/inet/'|awk 'NR==1 {print $2}'").readline().strip('\n')
@@ -42,30 +66,21 @@ def getIP():
 async def welcome_sequence(my_dog):
     try:
         logger.info("Starting welcome sequence")
-        # Initial sit
         my_dog.do_action('sit', speed=80)
         await asyncio.sleep(1)
         
-        # Play sound and flash RGB
-        logger.info("Playing sound and setting RGB")
         my_dog.rgb_strip.set_mode('breath', color='green', bps=1.0)
         my_dog.speak('pasha', 100)
         await asyncio.sleep(1)
         
-        # Handshake
-        logger.info("Performing handshake")
         my_dog.rgb_strip.set_mode('breath', color='blue', bps=1.0)
         hand_shake(my_dog)
         await asyncio.sleep(1)
         
-        # High five
-        logger.info("Performing high five")
         my_dog.rgb_strip.set_mode('breath', color='red', bps=1.0)
         high_five(my_dog)
         await asyncio.sleep(1)
         
-        # Return to normal position
-        logger.info("Returning to sit position")
         my_dog.rgb_strip.set_mode('breath', color='yellow', bps=0.5)
         my_dog.do_action('sit', speed=80)
         await asyncio.sleep(1)
@@ -78,12 +93,14 @@ async def welcome_sequence(my_dog):
 async def handle_command(websocket, path):
     try:
         async for message in websocket:
+            if not is_running:
+                break
+                
             logger.info(f"Received message: {message}")
             try:
                 data = json.loads(message)
                 command_type = data.get('command')
                 
-                # For head movement, don't wait
                 if command_type == 'head_move':
                     try:
                         head_data = data.get('data', {})
@@ -101,7 +118,6 @@ async def handle_command(websocket, path):
                     except Exception as e:
                         logger.error(f"Error in head movement: {e}")
 
-                # For other commands, send response
                 elif command_type == 'welcome':
                     try:
                         await websocket.send(json.dumps({
@@ -166,7 +182,18 @@ async def handle_command(websocket, path):
         logger.error(f"Unexpected error: {e}")
 
 async def main():
+    global my_dog, server, is_running
+    
     try:
+        # Set up signal handlers
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        
+        # Initialize PiDog
+        logger.info("Initializing PiDog")
+        my_dog = Pidog()
+        time.sleep(0.5)
+        
         # Start video stream
         logger.info("Starting video stream")
         Vilib.camera_start(vflip=False, hflip=False)
@@ -180,22 +207,23 @@ async def main():
         # Start WebSocket server
         server = await websockets.serve(handle_command, "0.0.0.0", 8765)
         logger.info("WebSocket server running...")
-        await server.wait_closed()
+        
+        # Keep the server running
+        while is_running:
+            await asyncio.sleep(1)
+            
     except Exception as e:
         logger.error(f"Error in main: {e}")
-        raise
+    finally:
+        cleanup()
 
 if __name__ == "__main__":
     try:
+        # Run the async main function
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("\nServer stopped by user")
     except Exception as e:
         logger.error(f"\033[31mERROR: {e}\033[m")
     finally:
-        try:
-            my_dog.close()
-            Vilib.camera_close()
-            logger.info("Resources cleaned up successfully")
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+        cleanup()
