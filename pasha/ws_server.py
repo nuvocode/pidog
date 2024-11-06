@@ -83,6 +83,7 @@ async def handle_command(websocket, path):
                 data = json.loads(message)
                 command_type = data.get('command')
                 
+                # For head movement, don't wait
                 if command_type == 'head_move':
                     try:
                         head_data = data.get('data', {})
@@ -90,103 +91,61 @@ async def handle_command(websocket, path):
                         pitch = head_data.get('pitch', 0)
                         roll = head_data.get('roll', 0)
                         
-                        # Update head position
                         head_yrp[0] = yaw
                         head_yrp[1] = roll
                         head_yrp[2] = pitch
                         
-                        # Move head
                         my_dog.head_move([head_yrp], pitch_comp=head_pitch_init,
                                        immediately=True, speed=HEAD_SPEED)
                         
-                        response = {
-                            'status': 'success',
-                            'command': 'head_move',
-                            'position': {'yaw': yaw, 'pitch': pitch, 'roll': roll}
-                        }
-                        logger.info(f"Head moved to - Yaw: {yaw}, Pitch: {pitch}, Roll: {roll}")
                     except Exception as e:
                         logger.error(f"Error in head movement: {e}")
-                        response = {
-                            'status': 'error',
-                            'command': 'head_move',
-                            'message': str(e)
-                        }
-                    await websocket.send(json.dumps(response))
 
+                # For other commands, send response
                 elif command_type == 'welcome':
                     try:
-                        logger.info("Processing welcome command")
-                        success = await welcome_sequence(my_dog)
-                        response = {
-                            'status': 'success' if success else 'error',
+                        await websocket.send(json.dumps({
+                            'status': 'success',
                             'command': 'welcome'
-                        }
-                        logger.info("Welcome sequence completed")
+                        }))
+                        await welcome_sequence(my_dog)
                     except Exception as e:
                         logger.error(f"Error in welcome sequence: {e}")
-                        response = {
+                        await websocket.send(json.dumps({
                             'status': 'error',
                             'command': 'welcome',
                             'message': str(e)
-                        }
-                    await websocket.send(json.dumps(response))
+                        }))
 
                 elif command_type == 'sit':
                     try:
-                        logger.info("Processing sit command")
-                        my_dog.do_action('sit', speed=80)
-                        await asyncio.sleep(1)
-                        response = {
+                        await websocket.send(json.dumps({
                             'status': 'success',
                             'command': 'sit'
-                        }
-                        logger.info("Sit command completed")
+                        }))
+                        my_dog.do_action('sit', speed=80)
                     except Exception as e:
                         logger.error(f"Error in sit command: {e}")
-                        response = {
+                        await websocket.send(json.dumps({
                             'status': 'error',
                             'command': 'sit',
                             'message': str(e)
-                        }
-                    await websocket.send(json.dumps(response))
+                        }))
 
                 elif command_type == 'stand':
                     try:
-                        logger.info("Processing stand command")
-                        my_dog.do_action('stand', speed=80)
-                        await asyncio.sleep(1)
-                        response = {
+                        await websocket.send(json.dumps({
                             'status': 'success',
                             'command': 'stand'
-                        }
-                        logger.info("Stand command completed")
+                        }))
+                        my_dog.do_action('stand', speed=80)
                     except Exception as e:
                         logger.error(f"Error in stand command: {e}")
-                        response = {
+                        await websocket.send(json.dumps({
                             'status': 'error',
                             'command': 'stand',
                             'message': str(e)
-                        }
-                    await websocket.send(json.dumps(response))
-                    
-                elif command_type == 'voice_command':
-                    try:
-                        command = data.get('data', {}).get('command', '')
-                        logger.info(f"Received voice command: {command}")
-                        response = {
-                            'status': 'success',
-                            'command': 'voice_command',
-                            'processed': command
-                        }
-                    except Exception as e:
-                        logger.error(f"Error in voice command: {e}")
-                        response = {
-                            'status': 'error',
-                            'command': 'voice_command',
-                            'message': str(e)
-                        }
-                    await websocket.send(json.dumps(response))
+                        }))
 
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding message: {e}")
@@ -200,6 +159,7 @@ async def handle_command(websocket, path):
                     'status': 'error',
                     'message': f"Processing error: {str(e)}"
                 }))
+
     except websockets.exceptions.ConnectionClosed:
         logger.info("Client disconnected")
     except Exception as e:
